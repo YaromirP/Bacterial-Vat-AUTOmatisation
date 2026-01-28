@@ -122,18 +122,49 @@ end
 
 local function listRadiosForOutput(outRawCoord)
     local list = {}
+    local foundAny = false
     for _, radio in pairs(radioHatchLib) do
         local radioMachine = radio[1]
         local radRawCoord = radio[2]
+        foundAny = true
         table.insert(list, {machine = radioMachine, coord = radRawCoord})
     end
-    return list
+    return list, foundAny
 end
 
-local function chooseRadioForOutput(outRawCoord)
-    local list = listRadiosForOutput(outRawCoord)
+local function isRadioUsedForFluid(fluidType, radioMachine)
+    for _, group in ipairs(HatchesGroup) do
+        if group[1] == fluidType and group[4] == radioMachine then
+            return true
+        end
+    end
+    return false
+end
+
+local function listAvailableRadios(fluidType)
+    local list = {}
+    local foundAny = false
+    for _, radio in pairs(radioHatchLib) do
+        local radioMachine = radio[1]
+        local radRawCoord = radio[2]
+        foundAny = true
+        if not isRadioUsedForFluid(fluidType, radioMachine) then
+            table.insert(list, {machine = radioMachine, coord = radRawCoord})
+        end
+    end
+    return list, foundAny
+end
+
+local function chooseRadioForOutput(outRawCoord, fluidType)
+    local list, foundAny = listAvailableRadios(fluidType)
     if #list == 0 then
+        if foundAny then
+            return nil, nil, "All radio hatches for fluid '" .. fluidType .. "' are already used"
+        end
         return nil, nil, "Radio hatch not found for output"
+    end
+    if #list == 1 then
+        return list[1].machine, list[1].coord, nil
     end
     -- ensure prompt is visible after prior selection lists
     if printMenu then
@@ -198,7 +229,7 @@ local function buildGroup(fluidType, optFluidRate)
         return nil, "Fluid interface not found around transposer for '" .. fluidType .. "'"
     end
 
-    local radioMachine, radCoords, radioErr = chooseRadioForOutput(outRawCoord)
+    local radioMachine, radCoords, radioErr = chooseRadioForOutput(outRawCoord, fluidType)
     if not radioMachine then
         return nil, radioErr or "Radio hatch not found for '" .. fluidType .. "'"
     end
