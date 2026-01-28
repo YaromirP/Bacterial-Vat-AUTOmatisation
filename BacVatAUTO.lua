@@ -125,9 +125,7 @@ local function listRadiosForOutput(outRawCoord)
     for _, radio in pairs(radioHatchLib) do
         local radioMachine = radio[1]
         local radRawCoord = radio[2]
-        if outRawCoord.x == radRawCoord.x and outRawCoord.z == radRawCoord.z then
-            table.insert(list, {machine = radioMachine, coord = radRawCoord})
-        end
+        table.insert(list, {machine = radioMachine, coord = radRawCoord})
     end
     return list
 end
