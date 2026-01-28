@@ -137,9 +137,6 @@ local function chooseRadioForOutput(outRawCoord)
     if #list == 0 then
         return nil, nil, "Radio hatch not found for output"
     end
-    if #list == 1 then
-        return list[1].machine, list[1].coord, nil
-    end
     while true do
         print("Select radio hatch index:")
         for i, item in ipairs(list) do
