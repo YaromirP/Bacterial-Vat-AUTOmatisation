@@ -36,14 +36,10 @@ end
 local transLib = {}
 local outputHatchLib = {}
 local radioHatchLib = {}
+local scanning = true
 local outputHatches = 0
 local tankSide = side.down
-
-local function scanComponents()
-    transLib = {}
-    outputHatchLib = {}
-    radioHatchLib = {}
-    outputHatches = 0
+while scanning == true do
     for deliver, _ in pairs(comp.list("trans")) do
         table.insert(transLib, comp.proxy(deliver))
     end
@@ -51,22 +47,20 @@ local function scanComponents()
         local machine = comp.proxy(key)
         if string.find(machine.getName(), "radio", 1, true) then
             local x, y, z = machine.getCoordinates()
-            local rad = {machine, {x = x, y = y, z = z}}
+            rad = {machine, {x = x, y = y, z = z}}
             table.insert(radioHatchLib, rad)
         elseif string.find(machine.getName(), "hatch.output", 1, true) then
             local x, y, z = machine.getCoordinates()
-            local out = {machine, {x = x, y = y, z = z}}
+            out = {machine, {x = x, y = y, z = z}}
             table.insert(outputHatchLib, out)
             outputHatches = outputHatches + 1
         end
     end
+    scanning = false
 end
-
-scanComponents()
 local HatchesGroup = {}
 local printError
 local radioForcedOff = {}
-local lowRateLimit = 3
 
 local function isTransposerUsedForFluid(fluidType, transposer)
     for _, group in ipairs(HatchesGroup) do
@@ -97,60 +91,13 @@ local function listTransposersWithFluid(fluidType)
     return list, foundAny
 end
 
-local function findInterfaceSideForTransposer(tr)
-    for _, s in ipairs({side.up, side.north, side.south, side.west, side.east}) do
-        if tr.getInventoryName(s) == "tile.fluid_interface" then
-            return s
-        end
-    end
-    return nil
-end
-
-local function listTransposersWithInterface(fluidType)
-    local list = {}
-    for _, tr in pairs(transLib) do
-        if not isTransposerUsedForFluid(fluidType, tr) then
-            local iface = findInterfaceSideForTransposer(tr)
-            if iface then
-                table.insert(list, {tr = tr, side = iface})
-            end
-        end
-    end
-    return list
-end
-
 local function chooseTransposerForFluid(fluidType)
     local list, foundAny = listTransposersWithFluid(fluidType)
     if #list == 0 then
         if foundAny then
             return nil, "All transposers with fluid '" .. fluidType .. "' are already used"
         end
-        local fallback = listTransposersWithInterface(fluidType)
-        if #fallback == 0 then
-            return nil, "Transposer with fluid '" .. fluidType .. "' not found"
-        end
-        if printError then
-            printError("Fluid not found in tanks. Select transposer manually.")
-        end
-        if #fallback == 1 then
-            return fallback[1].tr, nil
-        end
-        while true do
-            print("Select transposer index for '" .. fluidType .. "':")
-            for i, item in ipairs(fallback) do
-                local addr = item.tr.address or tostring(item.tr)
-                print(string.format("  %d) %s | interface=%s", i, tostring(addr), tostring(item.side)))
-            end
-            local idx = tonumber(io.read())
-            if idx and fallback[idx] then
-                return fallback[idx].tr, nil
-            end
-            if printError then
-                printError("Invalid transposer index")
-            else
-                print("Invalid transposer index")
-            end
-        end
+        return nil, "Transposer with fluid '" .. fluidType .. "' not found"
     end
     if #list == 1 then
         return list[1].tr, nil
@@ -249,7 +196,7 @@ local function chooseRadioForOutput(outRawCoord, fluidType)
     end
 end
 
-local function buildGroup(fluidType, optFluidRate, recipeTime)
+local function buildGroup(fluidType, optFluidRate)
     local neededHatch = nil
     local outRawCoord = nil
 
@@ -286,7 +233,7 @@ local function buildGroup(fluidType, optFluidRate, recipeTime)
     if not radioMachine then
         return nil, radioErr or "Radio hatch not found for '" .. fluidType .. "'"
     end
-    local findedGroup = {fluidType, optFluidRate, neededHatch, radioMachine, thatsHatch, radCoords, outputInterfaceSide, true, 0, recipeTime or 0, nil, 0, 0}
+    local findedGroup = {fluidType, optFluidRate, neededHatch, radioMachine, thatsHatch, radCoords, outputInterfaceSide, true}
     return findedGroup, nil
 end
 
@@ -345,7 +292,6 @@ local function printMenu(clear)
     print(" 4 - enable group")
     print(" 5 - remove group")
     print(" 6 - list groups")
-    print(" 7 - set low-rate limit (now " .. tostring(lowRateLimit) .. ")")
     print(" 0 - exit program")
 end
 
@@ -385,28 +331,17 @@ local function printGroups()
     end
 end
 
-local function promptGroupLoop(allowQuit)
+local function promptGroupLoop()
     while true do
         printMenu(true)
-        if allowQuit then
-            print("Enter Fluid type name (q to cancel):")
-        else
-            print("Enter Fluid type name:")
-        end
+        print("Enter Fluid type name:")
         local fluidType = io.read()
-        if allowQuit and (fluidType == "q" or fluidType == "Q") then
-            return nil, "cancel"
-        end
         print("Enter optimal fluid rate:")
         local optFluidRate = tonumber(io.read())
-        print("Enter recipe time (seconds):")
-        local recipeTime = tonumber(io.read())
         if not optFluidRate then
             printError("Invalid optFluidRate")
-        elseif not recipeTime or recipeTime <= 0 then
-            printError("Invalid recipe time")
         else
-            local group, err = buildGroup(fluidType, optFluidRate, recipeTime)
+            local group, err = buildGroup(fluidType, optFluidRate)
             if group then
                 return group
             end
@@ -418,15 +353,7 @@ local function promptGroupLoop(allowQuit)
 end
 
 local function addGroupInteractive()
-    scanComponents()
-    local group, err = promptGroupLoop(true)
-    if not group then
-        if err and err ~= "cancel" then
-            printError(err)
-        end
-        printMenu(true)
-        return
-    end
+    local group = promptGroupLoop()
     table.insert(HatchesGroup, group)
     print("Added group #" .. tostring(#HatchesGroup))
     printMenu(true)
@@ -478,10 +405,6 @@ local function enableRadioInteractive()
         return
     end
     HatchesGroup[idx][8] = true
-    HatchesGroup[idx][9] = 0
-    HatchesGroup[idx][11] = nil
-    HatchesGroup[idx][12] = 0
-    HatchesGroup[idx][13] = 0
     if anyGroupDisabledForRadio(HatchesGroup[idx][4]) then
         setRadioForced(HatchesGroup[idx][4], true)
         setRadioAllowed(HatchesGroup[idx][4], false)
@@ -521,19 +444,6 @@ local function listGroupsInteractive()
     printGroups()
 end
 
-local function setLowRateLimitInteractive()
-    printMenu(true)
-    print("Enter low-rate limit (>= 1):")
-    local v = tonumber(io.read())
-    if not v or v < 1 then
-        printError("Invalid low-rate limit")
-        return
-    end
-    lowRateLimit = math.floor(v)
-    print("lowRateLimit = " .. tostring(lowRateLimit))
-    printMenu(true)
-end
-
 handleKey = function(char)
     if char == 49 then
         addGroupInteractive()
@@ -547,8 +457,6 @@ handleKey = function(char)
         removeGroupInteractive()
     elseif char == 54 then
         listGroupsInteractive()
-    elseif char == 55 then
-        setLowRateLimitInteractive()
     elseif char == 48 then
         setRadioAllowed(nil, false)
         term.clear()
@@ -557,7 +465,7 @@ handleKey = function(char)
 end
 
 while outputHatches ~= 0 do
-    local group = promptGroupLoop(false)
+    local group = promptGroupLoop()
     table.insert(HatchesGroup, group)
     outputHatches = outputHatches - 1
 end
@@ -624,40 +532,9 @@ local function waitForAmountChange(transposer, fluidType, lastAmount)
     end
 end
 
-local function checkRecipeStall(group, amount, idx)
-    local recipeTime = group[10] or 0
-    if recipeTime <= 0 then
-        return
-    end
-    local now = computer.uptime()
-    local lastTime = group[12] or 0
-    if now - lastTime < recipeTime then
-        return
-    end
-    local lastAmount = group[11]
-    if lastAmount ~= nil and amount == lastAmount then
-        local unchanged = (group[13] or 0) + 1
-        group[13] = unchanged
-        if unchanged >= 3 then
-            group[8] = false
-            setRadioForced(group[4], true)
-            setRadioAllowed(group[4], false)
-            printError(string.format(
-                "Radio disabled (recipe stalled) group=%d fluid=%s",
-                idx,
-                tostring(group[1])
-            ))
-        end
-    else
-        group[13] = 0
-    end
-    group[11] = amount
-    group[12] = now
-end
-
 local rateInterval = 1
 while true do
-    for idx, group in ipairs(HatchesGroup) do
+    for _, group in pairs(HatchesGroup) do
         local fluidType = group[1]
         local optRate = group[2]
         local radioMachine = group[4]
@@ -678,8 +555,6 @@ while true do
                 local capacity = info.capacity or 0
                 local target = capacity * 0.5
 
-                checkRecipeStall(group, amount, idx)
-
                 if amount >= target then
                     setRadioAllowed(radioMachine, true)
 
@@ -695,25 +570,11 @@ while true do
                             output = 0
                         end
                         if output >= optRate then
-                            group[9] = 0
                             if not waitForAmountChange(transposer, fluidType, after) then
                                 return
                             end
                         elseif output < optRate then
-                            local lowCount = (group[9] or 0) + 1
-                            group[9] = lowCount
-                            if lowCount >= lowRateLimit then
-                                if lowCount == lowRateLimit then
-                                    printError(string.format(
-                                        "Radio disabled (low output) group=%d fluid=%s output=%s opt=%s",
-                                        idx,
-                                        tostring(fluidType),
-                                        tostring(output),
-                                        tostring(optRate)
-                                    ))
-                                end
-                                setRadioAllowed(radioMachine, false)
-                            end
+                            setRadioAllowed(radioMachine, false)
                         end
                     else
                         setRadioAllowed(radioMachine, false)
