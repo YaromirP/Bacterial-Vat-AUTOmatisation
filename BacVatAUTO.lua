@@ -61,6 +61,8 @@ end
 local HatchesGroup = {}
 local printError
 local radioForcedOff = {}
+local excessCheckInterval = 60
+local lastExcessCheck = 0
  
 local function isTransposerUsedForFluid(fluidType, transposer)
     for _, group in ipairs(HatchesGroup) do
@@ -292,6 +294,7 @@ local function printMenu(clear)
     print(" 4 - enable group")
     print(" 5 - remove group")
     print(" 6 - list groups")
+    print(" 7 - set excess check interval (now " .. tostring(excessCheckInterval) .. "s)")
     print(" 0 - exit program")
 end
  
@@ -443,7 +446,20 @@ local function listGroupsInteractive()
     printMenu(true)
     printGroups()
 end
- 
+
+local function setExcessIntervalInteractive()
+    printMenu(true)
+    print("Enter excess check interval (>= 1 sec):")
+    local v = tonumber(io.read())
+    if not v or v < 1 then
+        printError("Invalid interval")
+        return
+    end
+    excessCheckInterval = math.floor(v)
+    print("excessCheckInterval = " .. tostring(excessCheckInterval))
+    printMenu(true)
+end
+
 handleKey = function(char)
     if char == 49 then
         addGroupInteractive()
@@ -457,6 +473,8 @@ handleKey = function(char)
         removeGroupInteractive()
     elseif char == 54 then
         listGroupsInteractive()
+    elseif char == 55 then
+        setExcessIntervalInteractive()
     elseif char == 48 then
         setRadioAllowed(nil, false)
         term.clear()
@@ -586,8 +604,12 @@ while true do
         end
  
     end
-    -- Dump excess for all transposers each cycle
-    dumpExcessAllTransposers()
+    -- Dump excess for all transposers on interval
+    local now = computer.uptime()
+    if now - lastExcessCheck >= excessCheckInterval then
+        dumpExcessAllTransposers()
+        lastExcessCheck = now
+    end
     if not interruptableSleep(0.2) then
         return
     end
