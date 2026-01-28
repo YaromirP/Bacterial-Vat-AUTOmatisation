@@ -96,13 +96,60 @@ local function listTransposersWithFluid(fluidType)
     return list, foundAny
 end
 
+local function findInterfaceSideForTransposer(tr)
+    for _, s in ipairs({side.up, side.north, side.south, side.west, side.east}) do
+        if tr.getInventoryName(s) == "tile.fluid_interface" then
+            return s
+        end
+    end
+    return nil
+end
+
+local function listTransposersWithInterface(fluidType)
+    local list = {}
+    for _, tr in pairs(transLib) do
+        if not isTransposerUsedForFluid(fluidType, tr) then
+            local iface = findInterfaceSideForTransposer(tr)
+            if iface then
+                table.insert(list, {tr = tr, side = iface})
+            end
+        end
+    end
+    return list
+end
+
 local function chooseTransposerForFluid(fluidType)
     local list, foundAny = listTransposersWithFluid(fluidType)
     if #list == 0 then
         if foundAny then
             return nil, "All transposers with fluid '" .. fluidType .. "' are already used"
         end
-        return nil, "Transposer with fluid '" .. fluidType .. "' not found"
+        local fallback = listTransposersWithInterface(fluidType)
+        if #fallback == 0 then
+            return nil, "Transposer with fluid '" .. fluidType .. "' not found"
+        end
+        if printError then
+            printError("Fluid not found in tanks. Select transposer manually.")
+        end
+        if #fallback == 1 then
+            return fallback[1].tr, nil
+        end
+        while true do
+            print("Select transposer index for '" .. fluidType .. "':")
+            for i, item in ipairs(fallback) do
+                local addr = item.tr.address or tostring(item.tr)
+                print(string.format("  %d) %s | interface=%s", i, tostring(addr), tostring(item.side)))
+            end
+            local idx = tonumber(io.read())
+            if idx and fallback[idx] then
+                return fallback[idx].tr, nil
+            end
+            if printError then
+                printError("Invalid transposer index")
+            else
+                print("Invalid transposer index")
+            end
+        end
     end
     if #list == 1 then
         return list[1].tr, nil
