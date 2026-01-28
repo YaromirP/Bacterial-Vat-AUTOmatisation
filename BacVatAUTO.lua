@@ -566,16 +566,14 @@ while true do
             setRadioAllowed(radioMachine, false)
         else
             local _, info = findFluidTank(transposer, fluidType)
-            if not info or not info.capacity then
-                setRadioAllowed(radioMachine, false)
-            else
+            if info and info.capacity then
                 local amount = info.amount or 0
                 local capacity = info.capacity or 0
                 local target = capacity * 0.5
- 
+
                 if amount >= target then
                     setRadioAllowed(radioMachine, true)
- 
+
                     local before = amount
                     if not interruptableSleep(rateInterval) then
                         return
@@ -594,11 +592,7 @@ while true do
                         elseif output < optRate then
                             setRadioAllowed(radioMachine, false)
                         end
-                    else
-                        setRadioAllowed(radioMachine, false)
                     end
-                else
-                    setRadioAllowed(radioMachine, false)
                 end
             end
         end
