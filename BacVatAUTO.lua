@@ -249,7 +249,7 @@ local function chooseRadioForOutput(outRawCoord, fluidType)
     end
 end
 
-local function buildGroup(fluidType, optFluidRate)
+local function buildGroup(fluidType, optFluidRate, recipeTime)
     local neededHatch = nil
     local outRawCoord = nil
 
@@ -286,7 +286,7 @@ local function buildGroup(fluidType, optFluidRate)
     if not radioMachine then
         return nil, radioErr or "Radio hatch not found for '" .. fluidType .. "'"
     end
-    local findedGroup = {fluidType, optFluidRate, neededHatch, radioMachine, thatsHatch, radCoords, outputInterfaceSide, true, 0}
+    local findedGroup = {fluidType, optFluidRate, neededHatch, radioMachine, thatsHatch, radCoords, outputInterfaceSide, true, 0, recipeTime or 0, nil, 0, 0}
     return findedGroup, nil
 end
 
@@ -399,10 +399,14 @@ local function promptGroupLoop(allowQuit)
         end
         print("Enter optimal fluid rate:")
         local optFluidRate = tonumber(io.read())
+        print("Enter recipe time (seconds):")
+        local recipeTime = tonumber(io.read())
         if not optFluidRate then
             printError("Invalid optFluidRate")
+        elseif not recipeTime or recipeTime <= 0 then
+            printError("Invalid recipe time")
         else
-            local group, err = buildGroup(fluidType, optFluidRate)
+            local group, err = buildGroup(fluidType, optFluidRate, recipeTime)
             if group then
                 return group
             end
@@ -474,6 +478,10 @@ local function enableRadioInteractive()
         return
     end
     HatchesGroup[idx][8] = true
+    HatchesGroup[idx][9] = 0
+    HatchesGroup[idx][11] = nil
+    HatchesGroup[idx][12] = 0
+    HatchesGroup[idx][13] = 0
     if anyGroupDisabledForRadio(HatchesGroup[idx][4]) then
         setRadioForced(HatchesGroup[idx][4], true)
         setRadioAllowed(HatchesGroup[idx][4], false)
@@ -616,6 +624,37 @@ local function waitForAmountChange(transposer, fluidType, lastAmount)
     end
 end
 
+local function checkRecipeStall(group, amount, idx)
+    local recipeTime = group[10] or 0
+    if recipeTime <= 0 then
+        return
+    end
+    local now = computer.uptime()
+    local lastTime = group[12] or 0
+    if now - lastTime < recipeTime then
+        return
+    end
+    local lastAmount = group[11]
+    if lastAmount ~= nil and amount == lastAmount then
+        local unchanged = (group[13] or 0) + 1
+        group[13] = unchanged
+        if unchanged >= 3 then
+            group[8] = false
+            setRadioForced(group[4], true)
+            setRadioAllowed(group[4], false)
+            printError(string.format(
+                "Radio disabled (recipe stalled) group=%d fluid=%s",
+                idx,
+                tostring(group[1])
+            ))
+        end
+    else
+        group[13] = 0
+    end
+    group[11] = amount
+    group[12] = now
+end
+
 local rateInterval = 1
 while true do
     for idx, group in ipairs(HatchesGroup) do
@@ -638,6 +677,8 @@ while true do
                 local amount = info.amount or 0
                 local capacity = info.capacity or 0
                 local target = capacity * 0.5
+
+                checkRecipeStall(group, amount, idx)
 
                 if amount >= target then
                     setRadioAllowed(radioMachine, true)
