@@ -36,10 +36,14 @@ end
 local transLib = {}
 local outputHatchLib = {}
 local radioHatchLib = {}
-local scanning = true
 local outputHatches = 0
 local tankSide = side.down
-while scanning == true do
+
+local function scanComponents()
+    transLib = {}
+    outputHatchLib = {}
+    radioHatchLib = {}
+    outputHatches = 0
     for deliver, _ in pairs(comp.list("trans")) do
         table.insert(transLib, comp.proxy(deliver))
     end
@@ -47,17 +51,18 @@ while scanning == true do
         local machine = comp.proxy(key)
         if string.find(machine.getName(), "radio", 1, true) then
             local x, y, z = machine.getCoordinates()
-            rad = {machine, {x = x, y = y, z = z}}
+            local rad = {machine, {x = x, y = y, z = z}}
             table.insert(radioHatchLib, rad)
         elseif string.find(machine.getName(), "hatch.output", 1, true) then
             local x, y, z = machine.getCoordinates()
-            out = {machine, {x = x, y = y, z = z}}
+            local out = {machine, {x = x, y = y, z = z}}
             table.insert(outputHatchLib, out)
             outputHatches = outputHatches + 1
         end
     end
-    scanning = false
 end
+
+scanComponents()
 local HatchesGroup = {}
 local printError
 local radioForcedOff = {}
@@ -331,11 +336,18 @@ local function printGroups()
     end
 end
 
-local function promptGroupLoop()
+local function promptGroupLoop(allowQuit)
     while true do
         printMenu(true)
-        print("Enter Fluid type name:")
+        if allowQuit then
+            print("Enter Fluid type name (q to cancel):")
+        else
+            print("Enter Fluid type name:")
+        end
         local fluidType = io.read()
+        if allowQuit and (fluidType == "q" or fluidType == "Q") then
+            return nil, "cancel"
+        end
         print("Enter optimal fluid rate:")
         local optFluidRate = tonumber(io.read())
         if not optFluidRate then
@@ -353,7 +365,15 @@ local function promptGroupLoop()
 end
 
 local function addGroupInteractive()
-    local group = promptGroupLoop()
+    scanComponents()
+    local group, err = promptGroupLoop(true)
+    if not group then
+        if err and err ~= "cancel" then
+            printError(err)
+        end
+        printMenu(true)
+        return
+    end
     table.insert(HatchesGroup, group)
     print("Added group #" .. tostring(#HatchesGroup))
     printMenu(true)
@@ -465,7 +485,7 @@ handleKey = function(char)
 end
 
 while outputHatches ~= 0 do
-    local group = promptGroupLoop()
+    local group = promptGroupLoop(false)
     table.insert(HatchesGroup, group)
     outputHatches = outputHatches - 1
 end
