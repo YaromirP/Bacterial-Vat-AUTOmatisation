@@ -138,7 +138,9 @@ local function chooseRadioForOutput(outRawCoord)
         return nil, nil, "Radio hatch not found for output"
     end
     -- ensure prompt is visible after prior selection lists
-    printMenu(true)
+    if printMenu then
+        printMenu(true)
+    end
     while true do
         print("Select radio hatch index:")
         for i, item in ipairs(list) do
