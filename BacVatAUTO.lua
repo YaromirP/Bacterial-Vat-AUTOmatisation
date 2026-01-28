@@ -9,11 +9,11 @@ local term = require("term")
 local io = require("io")
 local keyboard = require("keyboard")
 term.clear()
-
+ 
 local function handleKey(char)
     -- placeholder, assigned later
 end
-
+ 
 function interruptableSleep(time) -- Альтернатива os.sleep, которая нормально работает с ctrl+c, а не только ctrl+alt+c
     local deadline = computer.uptime() + (time or 0)
     while true do
@@ -32,7 +32,7 @@ function interruptableSleep(time) -- Альтернатива os.sleep, кото
         end
     end
 end
-
+ 
 local transLib = {}
 local outputHatchLib = {}
 local radioHatchLib = {}
@@ -61,7 +61,7 @@ end
 local HatchesGroup = {}
 local printError
 local radioForcedOff = {}
-
+ 
 local function isTransposerUsedForFluid(fluidType, transposer)
     for _, group in ipairs(HatchesGroup) do
         if group[1] == fluidType and group[5] == transposer then
@@ -70,7 +70,7 @@ local function isTransposerUsedForFluid(fluidType, transposer)
     end
     return false
 end
-
+ 
 local function listTransposersWithFluid(fluidType)
     local list = {}
     local foundAny = false
@@ -90,7 +90,7 @@ local function listTransposersWithFluid(fluidType)
     end
     return list, foundAny
 end
-
+ 
 local function chooseTransposerForFluid(fluidType)
     local list, foundAny = listTransposersWithFluid(fluidType)
     if #list == 0 then
@@ -119,21 +119,52 @@ local function chooseTransposerForFluid(fluidType)
         end
     end
 end
-
+ 
 local function listRadiosForOutput(outRawCoord)
     local list = {}
+    local foundAny = false
     for _, radio in pairs(radioHatchLib) do
         local radioMachine = radio[1]
         local radRawCoord = radio[2]
+        foundAny = true
         table.insert(list, {machine = radioMachine, coord = radRawCoord})
     end
-    return list
+    return list, foundAny
 end
-
-local function chooseRadioForOutput(outRawCoord)
-    local list = listRadiosForOutput(outRawCoord)
+ 
+local function isRadioUsedForFluid(fluidType, radioMachine)
+    for _, group in ipairs(HatchesGroup) do
+        if group[1] == fluidType and group[4] == radioMachine then
+            return true
+        end
+    end
+    return false
+end
+ 
+local function listAvailableRadios(fluidType)
+    local list = {}
+    local foundAny = false
+    for _, radio in pairs(radioHatchLib) do
+        local radioMachine = radio[1]
+        local radRawCoord = radio[2]
+        foundAny = true
+        if not isRadioUsedForFluid(fluidType, radioMachine) then
+            table.insert(list, {machine = radioMachine, coord = radRawCoord})
+        end
+    end
+    return list, foundAny
+end
+ 
+local function chooseRadioForOutput(outRawCoord, fluidType)
+    local list, foundAny = listAvailableRadios(fluidType)
     if #list == 0 then
+        if foundAny then
+            return nil, nil, "All radio hatches for fluid '" .. fluidType .. "' are already used"
+        end
         return nil, nil, "Radio hatch not found for output"
+    end
+    if #list == 1 then
+        return list[1].machine, list[1].coord, nil
     end
     -- ensure prompt is visible after prior selection lists
     if printMenu then
@@ -164,11 +195,11 @@ local function chooseRadioForOutput(outRawCoord)
         end
     end
 end
-
+ 
 local function buildGroup(fluidType, optFluidRate)
     local neededHatch = nil
     local outRawCoord = nil
-
+ 
     for _, hatch in pairs(outputHatchLib) do
         local thatHatch = hatch
         local coord = hatch[2]
@@ -181,12 +212,12 @@ local function buildGroup(fluidType, optFluidRate)
     if not outRawCoord then
         return nil, "Output hatch for fluid '" .. fluidType .. "' not found"
     end
-
+ 
     local thatsHatch, err = chooseTransposerForFluid(fluidType)
     if not thatsHatch then
         return nil, err
     end
-
+ 
     local outputInterfaceSide = nil
     for _, s in ipairs({side.up, side.north, side.south, side.west, side.east}) do
         if thatsHatch.getInventoryName(s) == "tile.fluid_interface" then
@@ -197,15 +228,15 @@ local function buildGroup(fluidType, optFluidRate)
     if not outputInterfaceSide then
         return nil, "Fluid interface not found around transposer for '" .. fluidType .. "'"
     end
-
-    local radioMachine, radCoords, radioErr = chooseRadioForOutput(outRawCoord)
+ 
+    local radioMachine, radCoords, radioErr = chooseRadioForOutput(outRawCoord, fluidType)
     if not radioMachine then
         return nil, radioErr or "Radio hatch not found for '" .. fluidType .. "'"
     end
     local findedGroup = {fluidType, optFluidRate, neededHatch, radioMachine, thatsHatch, radCoords, outputInterfaceSide, true}
     return findedGroup, nil
 end
-
+ 
 local function setRadioAllowed(machine, allowed)
     if not machine then
         return
@@ -216,14 +247,14 @@ local function setRadioAllowed(machine, allowed)
         machine.setEnabled(allowed)
     end
 end
-
+ 
 local function radioKey(machine)
     if not machine then
         return nil
     end
     return machine.address or tostring(machine)
 end
-
+ 
 local function setRadioForced(machine, forced)
     local key = radioKey(machine)
     if not key then
@@ -235,12 +266,12 @@ local function setRadioForced(machine, forced)
         radioForcedOff[key] = nil
     end
 end
-
+ 
 local function isRadioForced(machine)
     local key = radioKey(machine)
     return key and radioForcedOff[key] or false
 end
-
+ 
 local function anyGroupDisabledForRadio(machine)
     for _, group in ipairs(HatchesGroup) do
         if group[4] == machine and group[8] == false then
@@ -249,7 +280,7 @@ local function anyGroupDisabledForRadio(machine)
     end
     return false
 end
-
+ 
 local function printMenu(clear)
     if clear then
         term.clear()
@@ -263,7 +294,7 @@ local function printMenu(clear)
     print(" 6 - list groups")
     print(" 0 - exit program")
 end
-
+ 
 local function setTextColorSafe(color)
     if term.setTextColor then
         pcall(term.setTextColor, color)
@@ -271,13 +302,13 @@ local function setTextColorSafe(color)
         pcall(comp.gpu.setForeground, color)
     end
 end
-
+ 
 printError = function(msg)
     setTextColorSafe(0xFF0000)
     print(msg)
     setTextColorSafe(0xFFFFFF)
 end
-
+ 
 local function printGroups()
     if #HatchesGroup == 0 then
         print("Groups: none")
@@ -299,7 +330,7 @@ local function printGroups()
         print(line)
     end
 end
-
+ 
 local function promptGroupLoop()
     while true do
         printMenu(true)
@@ -320,14 +351,14 @@ local function promptGroupLoop()
         io.read()
     end
 end
-
+ 
 local function addGroupInteractive()
     local group = promptGroupLoop()
     table.insert(HatchesGroup, group)
     print("Added group #" .. tostring(#HatchesGroup))
     printMenu(true)
 end
-
+ 
 local function updateRateInteractive()
     printMenu(true)
     printGroups()
@@ -347,7 +378,7 @@ local function updateRateInteractive()
     print("Group #" .. tostring(idx) .. " optFluidRate = " .. tostring(optFluidRate))
     printMenu(true)
 end
-
+ 
 local function disableRadioInteractive()
     printMenu(true)
     printGroups()
@@ -363,7 +394,7 @@ local function disableRadioInteractive()
     print("Group #" .. tostring(idx) .. " radio disabled")
     printMenu(true)
 end
-
+ 
 local function enableRadioInteractive()
     printMenu(true)
     printGroups()
@@ -384,7 +415,7 @@ local function enableRadioInteractive()
     print("Group #" .. tostring(idx) .. " radio enabled")
     printMenu(true)
 end
-
+ 
 local function removeGroupInteractive()
     printMenu(true)
     printGroups()
@@ -407,12 +438,12 @@ local function removeGroupInteractive()
     print("Group #" .. tostring(idx) .. " removed")
     printMenu(true)
 end
-
+ 
 local function listGroupsInteractive()
     printMenu(true)
     printGroups()
 end
-
+ 
 handleKey = function(char)
     if char == 49 then
         addGroupInteractive()
@@ -432,15 +463,15 @@ handleKey = function(char)
         os.exit()
     end
 end
-
+ 
 while outputHatches ~= 0 do
     local group = promptGroupLoop()
     table.insert(HatchesGroup, group)
     outputHatches = outputHatches - 1
 end
-
+ 
 printMenu(true)
-
+ 
 local function findFluidTank(transposer, fluidType)
     local tanks = transposer.getFluidInTank(tankSide)
     if tanks then
@@ -452,14 +483,14 @@ local function findFluidTank(transposer, fluidType)
     end
     return nil, nil
 end
-
+ 
 local function dumpExcess(transposer, outputSide, excess)
     if not transposer or not outputSide or excess <= 0 then
         return
     end
     transposer.transferFluid(tankSide, outputSide, excess)
 end
-
+ 
 local function findOutputInterfaceSide(transposer)
     for _, s in ipairs({side.up, side.north, side.south, side.west, side.east}) do
         if transposer.getInventoryName(s) == "tile.fluid_interface" then
@@ -468,7 +499,7 @@ local function findOutputInterfaceSide(transposer)
     end
     return nil
 end
-
+ 
 local function dumpExcessAllTransposers()
     for _, tr in pairs(transLib) do
         local outputSide = findOutputInterfaceSide(tr)
@@ -488,7 +519,7 @@ local function dumpExcessAllTransposers()
         end
     end
 end
-
+ 
 local function waitForAmountChange(transposer, fluidType, lastAmount)
     while true do
         if not interruptableSleep(1) then
@@ -500,7 +531,7 @@ local function waitForAmountChange(transposer, fluidType, lastAmount)
         end
     end
 end
-
+ 
 local rateInterval = 1
 while true do
     for _, group in pairs(HatchesGroup) do
@@ -510,7 +541,7 @@ while true do
         local transposer = group[5]
         local outputSide = group[7]
         local enabled = group[8] ~= false
-
+ 
         if isRadioForced(radioMachine) then
             setRadioAllowed(radioMachine, false)
         elseif not enabled then
@@ -523,10 +554,10 @@ while true do
                 local amount = info.amount or 0
                 local capacity = info.capacity or 0
                 local target = capacity * 0.5
-
+ 
                 if amount >= target then
                     setRadioAllowed(radioMachine, true)
-
+ 
                     local before = amount
                     if not interruptableSleep(rateInterval) then
                         return
@@ -553,7 +584,7 @@ while true do
                 end
             end
         end
-
+ 
     end
     -- Dump excess for all transposers each cycle
     dumpExcessAllTransposers()
