@@ -589,7 +589,7 @@ while true do
                             if not waitForAmountChange(transposer, fluidType, after) then
                                 return
                             end
-                        elseif output < optRate then
+                        elseif output < optRate and output > 0 then
                             setRadioAllowed(radioMachine, false)
                         end
                     end
