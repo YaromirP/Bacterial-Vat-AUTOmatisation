@@ -66,6 +66,7 @@ scanComponents()
 local HatchesGroup = {}
 local printError
 local radioForcedOff = {}
+local lowRateLimit = 3
 
 local function isTransposerUsedForFluid(fluidType, transposer)
     for _, group in ipairs(HatchesGroup) do
@@ -285,7 +286,7 @@ local function buildGroup(fluidType, optFluidRate)
     if not radioMachine then
         return nil, radioErr or "Radio hatch not found for '" .. fluidType .. "'"
     end
-    local findedGroup = {fluidType, optFluidRate, neededHatch, radioMachine, thatsHatch, radCoords, outputInterfaceSide, true}
+    local findedGroup = {fluidType, optFluidRate, neededHatch, radioMachine, thatsHatch, radCoords, outputInterfaceSide, true, 0}
     return findedGroup, nil
 end
 
@@ -344,6 +345,7 @@ local function printMenu(clear)
     print(" 4 - enable group")
     print(" 5 - remove group")
     print(" 6 - list groups")
+    print(" 7 - set low-rate limit (now " .. tostring(lowRateLimit) .. ")")
     print(" 0 - exit program")
 end
 
@@ -511,6 +513,19 @@ local function listGroupsInteractive()
     printGroups()
 end
 
+local function setLowRateLimitInteractive()
+    printMenu(true)
+    print("Enter low-rate limit (>= 1):")
+    local v = tonumber(io.read())
+    if not v or v < 1 then
+        printError("Invalid low-rate limit")
+        return
+    end
+    lowRateLimit = math.floor(v)
+    print("lowRateLimit = " .. tostring(lowRateLimit))
+    printMenu(true)
+end
+
 handleKey = function(char)
     if char == 49 then
         addGroupInteractive()
@@ -524,6 +539,8 @@ handleKey = function(char)
         removeGroupInteractive()
     elseif char == 54 then
         listGroupsInteractive()
+    elseif char == 55 then
+        setLowRateLimitInteractive()
     elseif char == 48 then
         setRadioAllowed(nil, false)
         term.clear()
@@ -601,7 +618,7 @@ end
 
 local rateInterval = 1
 while true do
-    for _, group in pairs(HatchesGroup) do
+    for idx, group in ipairs(HatchesGroup) do
         local fluidType = group[1]
         local optRate = group[2]
         local radioMachine = group[4]
@@ -637,11 +654,25 @@ while true do
                             output = 0
                         end
                         if output >= optRate then
+                            group[9] = 0
                             if not waitForAmountChange(transposer, fluidType, after) then
                                 return
                             end
                         elseif output < optRate then
-                            setRadioAllowed(radioMachine, false)
+                            local lowCount = (group[9] or 0) + 1
+                            group[9] = lowCount
+                            if lowCount >= lowRateLimit then
+                                if lowCount == lowRateLimit then
+                                    printError(string.format(
+                                        "Radio disabled (low output) group=%d fluid=%s output=%s opt=%s",
+                                        idx,
+                                        tostring(fluidType),
+                                        tostring(output),
+                                        tostring(optRate)
+                                    ))
+                                end
+                                setRadioAllowed(radioMachine, false)
+                            end
                         end
                     else
                         setRadioAllowed(radioMachine, false)
