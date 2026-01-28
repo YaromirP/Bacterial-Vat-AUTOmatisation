@@ -145,7 +145,15 @@ local function chooseRadioForOutput(outRawCoord)
         print("Select radio hatch index:")
         for i, item in ipairs(list) do
             local addr = item.machine and (item.machine.address or tostring(item.machine)) or "?"
-            print(string.format("  %d) %s", i, tostring(addr)))
+            local c = item.coord or {}
+            print(string.format(
+                "  %d) %s | x=%s y=%s z=%s",
+                i,
+                tostring(addr),
+                tostring(c.x),
+                tostring(c.y),
+                tostring(c.z)
+            ))
         end
         local idx = tonumber(io.read())
         if idx and list[idx] then
