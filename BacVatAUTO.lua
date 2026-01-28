@@ -286,7 +286,7 @@ local function printMenu(clear)
         term.clear()
     end
     print("Keys:")
-    print(" 1 - add group")
+    print(" 1 - add group (WIP) (Doesnt work)")
     print(" 2 - change rate")
     print(" 3 - disable group")
     print(" 4 - enable group")
