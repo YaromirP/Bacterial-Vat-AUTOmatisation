@@ -14,7 +14,8 @@
 <img width="406" height="703" alt="image" src="https://github.com/user-attachments/assets/dd13d3c1-6101-45cf-88ff-0202ede10c27" />
 
 6) Запускаем серверную стойку (Желательно) и заранее установив OpenOS вводим комманду:
-   wget https://raw.githubusercontent.com/YaromirP/Bacterial-Vat-AUTOmatisation/refs/heads/main/BacVatAUTO.lua BacVatAUTO.lua
+
+``wget https://raw.githubusercontent.com/YaromirP/Bacterial-Vat-AUTOmatisation/refs/heads/main/BacVatAUTO.lua BacVatAUTO.lua``
 
 7) Запускаем программу BacVatAUTO.lua и нас встречает простенький интерфейс:
 <img width="1589" height="1001" alt="image" src="https://github.com/user-attachments/assets/7b331a5f-df84-43cc-af2c-0a57488aa95b" />
