@@ -74,6 +74,59 @@ local function isTransposerUsed(transposer)
     end
     return false
 end
+
+local function listFluidsFromTransposers()
+    local list = {}
+    local seen = {}
+    for _, tr in pairs(transLib) do
+        if not isTransposerUsed(tr) then
+            local tanks = tr.getFluidInTank(tankSide)
+            if tanks then
+                for _, info in pairs(tanks) do
+                    if info and info.label then
+                        local key = tostring(tr.address or tr) .. "|" .. tostring(info.label)
+                        if not seen[key] then
+                            seen[key] = true
+                            table.insert(list, {fluid = info.label, tr = tr, amount = info.amount or 0, capacity = info.capacity or 0})
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return list
+end
+
+local function chooseFluidFromTransposers()
+    local list = listFluidsFromTransposers()
+    if #list == 0 then
+        return nil, "No fluids found in output hatches below transposers"
+    end
+    local counts = {}
+    for _, item in ipairs(list) do
+        counts[item.fluid] = (counts[item.fluid] or 0) + 1
+    end
+    while true do
+        print("Select fluid from output hatches:")
+        for i, item in ipairs(list) do
+            local line = tostring(item.fluid)
+            if counts[item.fluid] and counts[item.fluid] > 1 then
+                local addr = item.tr.address or tostring(item.tr)
+                line = line .. " | tr=" .. tostring(addr)
+            end
+            print(string.format("  %d) %s", i, line))
+        end
+        local idx = tonumber(io.read())
+        if idx and list[idx] then
+            return list[idx], nil
+        end
+        if printError then
+            printError("Invalid fluid index")
+        else
+            print("Invalid fluid index")
+        end
+    end
+end
  
 local function listTransposersWithFluid(fluidType)
     local list = {}
@@ -199,27 +252,81 @@ local function chooseRadioForOutput(outRawCoord, fluidType)
         end
     end
 end
+
+local function getTransposerCoords(transposer)
+    if transposer.getCoordinates then
+        local ok, x, y, z = pcall(transposer.getCoordinates, transposer)
+        if ok and x ~= nil then
+            if type(x) == "table" then
+                return x
+            end
+            return {x = x, y = y, z = z}
+        end
+    end
+    if transposer.getPosition then
+        local ok, x, y, z = pcall(transposer.getPosition, transposer)
+        if ok and x ~= nil then
+            if type(x) == "table" then
+                return x
+            end
+            return {x = x, y = y, z = z}
+        end
+    end
+    return nil
+end
+
+local function findOutputHatchForTransposer(transposer, fluidType)
+    local coords = getTransposerCoords(transposer)
+    if coords then
+        for _, hatch in pairs(outputHatchLib) do
+            local coord = hatch[2]
+            if coord and coord.x == coords.x and coord.z == coords.z then
+                return hatch
+            end
+        end
+    end
+    for _, hatch in pairs(outputHatchLib) do
+        local info = hatch[1].getSensorInformation()
+        if info and info[2] and string.find(info[2], fluidType, 1, true) then
+            return hatch
+        end
+    end
+    return nil
+end
  
-local function buildGroup(fluidType, optFluidRate)
+local function buildGroup(fluidType, optFluidRate, chosenTransposer)
     local neededHatch = nil
     local outRawCoord = nil
- 
-    for _, hatch in pairs(outputHatchLib) do
-        local thatHatch = hatch
-        local coord = hatch[2]
-        if string.find(thatHatch[1].getSensorInformation()[2], fluidType, 1, true) then
-            neededHatch = thatHatch
-            outRawCoord = coord
-            break
+    
+    if chosenTransposer then
+        local hatch = findOutputHatchForTransposer(chosenTransposer, fluidType)
+        if hatch then
+            neededHatch = hatch
+            outRawCoord = hatch[2]
+        end
+    end
+    if not outRawCoord then
+        for _, hatch in pairs(outputHatchLib) do
+            local thatHatch = hatch
+            local coord = hatch[2]
+            if string.find(thatHatch[1].getSensorInformation()[2], fluidType, 1, true) then
+                neededHatch = thatHatch
+                outRawCoord = coord
+                break
+            end
         end
     end
     if not outRawCoord then
         return nil, "Output hatch for fluid '" .. fluidType .. "' not found"
     end
  
-    local thatsHatch, err = chooseTransposerForFluid(fluidType)
+    local thatsHatch = chosenTransposer
     if not thatsHatch then
-        return nil, err
+        local err
+        thatsHatch, err = chooseTransposerForFluid(fluidType)
+        if not thatsHatch then
+            return nil, err
+        end
     end
  
     local outputInterfaceSide = nil
@@ -339,14 +446,22 @@ end
 local function promptGroupLoop()
     while true do
         printMenu(true)
-        print("Enter Fluid type name:")
-        local fluidType = io.read()
+        local chosen, chooseErr = chooseFluidFromTransposers()
+        if not chosen then
+            if chooseErr then
+                printError(chooseErr)
+            end
+            print("Press Enter to retry...")
+            io.read()
+        else
+            local fluidType = chosen.fluid
+            local chosenTransposer = chosen.tr
         print("Enter optimal fluid rate:")
         local optFluidRate = tonumber(io.read())
         if not optFluidRate then
             printError("Invalid optFluidRate")
         else
-            local group, err = buildGroup(fluidType, optFluidRate)
+            local group, err = buildGroup(fluidType, optFluidRate, chosenTransposer)
             if group then
                 return group
             end
@@ -354,6 +469,7 @@ local function promptGroupLoop()
         end
         print("Press Enter to retry...")
         io.read()
+        end
     end
 end
  
