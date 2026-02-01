@@ -108,6 +108,7 @@ local function chooseFluidFromTransposers()
     end
     while true do
         print("Select fluid from output hatches:")
+        print(" (q to cancel)")
         for i, item in ipairs(list) do
             local line = tostring(item.fluid)
             if counts[item.fluid] and counts[item.fluid] > 1 then
@@ -116,7 +117,11 @@ local function chooseFluidFromTransposers()
             end
             print(string.format("  %d) %s", i, line))
         end
-        local idx = tonumber(io.read())
+        local raw = io.read()
+        if raw == "q" or raw == "Q" then
+            return nil, "cancel"
+        end
+        local idx = tonumber(raw)
         if idx and list[idx] then
             return list[idx], nil
         end
@@ -449,6 +454,9 @@ local function promptGroupLoop()
         local chosen, chooseErr = chooseFluidFromTransposers()
         if not chosen then
             if chooseErr then
+                if chooseErr == "cancel" then
+                    return nil, "cancel"
+                end
                 printError(chooseErr)
             end
             print("Press Enter to retry...")
@@ -456,8 +464,12 @@ local function promptGroupLoop()
         else
             local fluidType = chosen.fluid
             local chosenTransposer = chosen.tr
-        print("Enter optimal fluid rate:")
-        local optFluidRate = tonumber(io.read())
+        print("Enter optimal fluid rate (q to cancel):")
+        local rateRaw = io.read()
+        if rateRaw == "q" or rateRaw == "Q" then
+            return nil, "cancel"
+        end
+        local optFluidRate = tonumber(rateRaw)
         if not optFluidRate then
             printError("Invalid optFluidRate")
         else
@@ -475,7 +487,14 @@ end
  
 local function addGroupInteractive()
     scanComponents()
-    local group = promptGroupLoop()
+    local group, err = promptGroupLoop()
+    if not group then
+        if err and err ~= "cancel" then
+            printError(err)
+        end
+        printMenu(true)
+        return
+    end
     table.insert(HatchesGroup, group)
     print("Added group #" .. tostring(#HatchesGroup))
     printMenu(true)
