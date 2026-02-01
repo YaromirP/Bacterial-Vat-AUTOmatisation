@@ -36,10 +36,12 @@ end
 local transLib = {}
 local outputHatchLib = {}
 local radioHatchLib = {}
-local scanning = true
-local outputHatches = 0
 local tankSide = side.down
-while scanning == true do
+
+local function scanComponents()
+    transLib = {}
+    outputHatchLib = {}
+    radioHatchLib = {}
     for deliver, _ in pairs(comp.list("trans")) do
         table.insert(transLib, comp.proxy(deliver))
     end
@@ -47,26 +49,26 @@ while scanning == true do
         local machine = comp.proxy(key)
         if string.find(machine.getName(), "radio", 1, true) then
             local x, y, z = machine.getCoordinates()
-            rad = {machine, {x = x, y = y, z = z}}
+            local rad = {machine, {x = x, y = y, z = z}}
             table.insert(radioHatchLib, rad)
         elseif string.find(machine.getName(), "hatch.output", 1, true) then
             local x, y, z = machine.getCoordinates()
-            out = {machine, {x = x, y = y, z = z}}
+            local out = {machine, {x = x, y = y, z = z}}
             table.insert(outputHatchLib, out)
-            outputHatches = outputHatches + 1
         end
     end
-    scanning = false
 end
+
+scanComponents()
 local HatchesGroup = {}
 local printError
 local radioForcedOff = {}
 local excessCheckInterval = 60
 local lastExcessCheck = 0
  
-local function isTransposerUsedForFluid(fluidType, transposer)
+local function isTransposerUsed(transposer)
     for _, group in ipairs(HatchesGroup) do
-        if group[1] == fluidType and group[5] == transposer then
+        if group[5] == transposer then
             return true
         end
     end
@@ -82,7 +84,7 @@ local function listTransposersWithFluid(fluidType)
             for _, info in pairs(fluidInTank) do
                 if info.label == fluidType then
                     foundAny = true
-                    if not isTransposerUsedForFluid(fluidType, tr) then
+                    if not isTransposerUsed(tr) then
                         table.insert(list, {tr = tr, amount = info.amount or 0, capacity = info.capacity or 0})
                     end
                     break
@@ -134,9 +136,9 @@ local function listRadiosForOutput(outRawCoord)
     return list, foundAny
 end
  
-local function isRadioUsedForFluid(fluidType, radioMachine)
+local function isRadioUsed(radioMachine)
     for _, group in ipairs(HatchesGroup) do
-        if group[1] == fluidType and group[4] == radioMachine then
+        if group[4] == radioMachine then
             return true
         end
     end
@@ -150,7 +152,7 @@ local function listAvailableRadios(fluidType)
         local radioMachine = radio[1]
         local radRawCoord = radio[2]
         foundAny = true
-        if not isRadioUsedForFluid(fluidType, radioMachine) then
+        if not isRadioUsed(radioMachine) then
             table.insert(list, {machine = radioMachine, coord = radRawCoord})
         end
     end
@@ -356,6 +358,7 @@ local function promptGroupLoop()
 end
  
 local function addGroupInteractive()
+    scanComponents()
     local group = promptGroupLoop()
     table.insert(HatchesGroup, group)
     print("Added group #" .. tostring(#HatchesGroup))
@@ -480,12 +483,6 @@ handleKey = function(char)
         term.clear()
         os.exit()
     end
-end
- 
-while outputHatches ~= 0 do
-    local group = promptGroupLoop()
-    table.insert(HatchesGroup, group)
-    outputHatches = outputHatches - 1
 end
  
 printMenu(true)
